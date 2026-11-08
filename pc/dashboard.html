@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>防占座监测 · 座位总览</title>
+<style>
+  :root{
+    --bg0:#05070d; --bg1:#0b1020; --bg2:#111a33;
+    --ink:#e8eefc; --ink2:#93a2c4; --ink3:#5c6a8a;
+    --line:rgba(255,255,255,.07);
+    --glass:rgba(255,255,255,.045);
+    --empty:#34d399; --seated:#60a5fa; --object:#fbbf24; --hog:#f87171;
+    --shadow:0 18px 50px -18px rgba(0,0,0,.9);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--ink); font-family:"Segoe UI Variable","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background:
+      radial-gradient(1200px 700px at 12% -10%, #1a2a5c55, transparent 60%),
+      radial-gradient(900px 600px at 92% 0%, #0f4f4a55, transparent 55%),
+      linear-gradient(165deg, var(--bg0), var(--bg1) 45%, var(--bg0));
+    background-attachment:fixed; min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1560px; margin:0 auto; padding:34px 30px 60px}
+
+  /* ---------- 顶栏 ---------- */
+  header{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap; margin-bottom:28px}
+  .brand{display:flex; align-items:center; gap:16px}
+  .logo{
+    width:52px;height:52px;border-radius:16px;flex:0 0 auto;position:relative;
+    background:linear-gradient(145deg,#2b3f7d,#0e1730);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 10px 30px -10px #2b3f7d;
+    display:grid;place-items:center;
+  }
+  .logo svg{width:26px;height:26px}
+  h1{margin:0;font-size:26px;letter-spacing:.02em;font-weight:650}
+  .sub{margin:5px 0 0;color:var(--ink2);font-size:13px;letter-spacing:.06em}
+  .stats{display:flex;gap:14px;flex-wrap:wrap}
+  .stat{
+    min-width:118px;padding:13px 18px;border-radius:18px;background:var(--glass);
+    border:1px solid var(--line);backdrop-filter:blur(18px);box-shadow:var(--shadow);
+  }
+  .stat .k{font-size:11px;letter-spacing:.14em;color:var(--ink3);text-transform:uppercase}
+  .stat .v{font-size:26px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+  .stat.alarm .v{color:var(--hog)}
+  .clock{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:13px;letter-spacing:.08em}
+
+  /* ---------- 卡片网格 ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+  .card{
+    position:relative;padding:22px 22px 18px;border-radius:22px;overflow:hidden;
+    background:linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
+    border:1px solid var(--line); backdrop-filter:blur(20px);
+    box-shadow:var(--shadow); transition:transform .25s ease, border-color .25s ease;
+  }
+  .card:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.14)}
+  .card::before{
+    content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--c,#334155);
+    box-shadow:0 0 22px 0 var(--c,#334155);
+  }
+  .card.hog{animation:hogpulse 1.6s ease-in-out infinite}
+  @keyframes hogpulse{
+    0%,100%{box-shadow:var(--shadow), 0 0 0 0 rgba(248,113,113,.0)}
+    50%{box-shadow:var(--shadow), 0 0 32px -6px rgba(248,113,113,.55)}
+  }
+  .chead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .name{font-size:16px;font-weight:600;letter-spacing:.01em;display:flex;align-items:center;gap:9px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--c,#475569);box-shadow:0 0 10px var(--c,#475569)}
+  .ip{color:var(--ink3);font-size:12px;margin-top:5px;letter-spacing:.05em;font-variant-numeric:tabular-nums}
+  .pill{
+    padding:6px 13px;border-radius:999px;font-size:12.5px;font-weight:600;letter-spacing:.04em;
+    color:var(--c,#cbd5e1);background:color-mix(in srgb, var(--c,#475569) 16%, transparent);
+    border:1px solid color-mix(in srgb, var(--c,#475569) 42%, transparent);white-space:nowrap;
+  }
+  .weight{display:flex;align-items:baseline;gap:8px;margin:20px 0 4px}
+  .weight b{font-size:46px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .weight span{color:var(--ink3);font-size:14px;letter-spacing:.06em}
+  canvas{width:100%;height:52px;display:block;margin:6px 0 14px}
+  .rows{display:grid;grid-template-columns:1fr 1fr;gap:9px 16px;font-size:13px}
+  .row{display:flex;justify-content:space-between;gap:10px;color:var(--ink2)}
+  .row b{color:var(--ink);font-weight:550;font-variant-numeric:tabular-nums}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}
+  .btn{
+    padding:10px 0;border-radius:12px;border:1px solid var(--line);
+    background:rgba(255,255,255,.05);color:var(--ink);font-size:12.5px;letter-spacing:.04em;
+    cursor:pointer;transition:.18s ease;font-family:inherit;
+  }
+  .btn:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2)}
+  .btn:active{transform:scale(.97)}
+  .btn.warn:hover{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.5)}
+  .ghost{opacity:.45}
+  .sndbtn{
+    margin-left:14px;padding:10px 16px;border-radius:14px;cursor:pointer;
+    border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--ink2);
+    font-size:13px;font-family:inherit;white-space:nowrap;transition:.18s ease;
+  }
+  .sndbtn:hover{background:rgba(255,255,255,.09);color:var(--ink)}
+  .sndbtn.on{border-color:rgba(248,113,113,.55);background:rgba(248,113,113,.14);color:#fca5a5}
+  .sndbtn.on.ringing{animation:sndpulse .9s ease-in-out infinite}
+  @keyframes sndpulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.45)}50%{box-shadow:0 0 0 9px rgba(248,113,113,0)}}
+
+  .empty{
+    grid-column:1/-1;text-align:center;padding:90px 20px;border-radius:24px;
+    border:1px dashed rgba(255,255,255,.12);color:var(--ink2);background:rgba(255,255,255,.02)
+  }
+  .empty h3{margin:0 0 10px;font-weight:550;color:var(--ink)}
+  .empty code{color:#9db4ff;background:rgba(99,140,255,.12);padding:2px 7px;border-radius:7px}
+  footer{margin-top:34px;color:var(--ink3);font-size:12px;letter-spacing:.05em;display:flex;gap:18px;flex-wrap:wrap}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px;font-size:12.5px;color:var(--ink2)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:1px}
+  /* ---------- 手机 / 窄屏兼容 ---------- */
+  @media (max-width: 720px){
+    .wrap{padding:18px 14px 40px}
+    header{gap:14px;margin-bottom:18px}
+    h1{font-size:20px}
+    .logo{width:42px;height:42px;border-radius:13px}
+    .sub{font-size:11.5px}
+    .stats{width:100%;gap:9px}
+    .stat{flex:1 1 0;min-width:0;padding:10px 12px;border-radius:14px}
+    .grid{grid-template-columns:1fr;gap:14px}
+    .card{padding:16px 16px 14px;border-radius:18px}
+    .rows{grid-template-columns:1fr;gap:7px}
+    .acts{grid-template-columns:1fr 1fr}
+    .legend{font-size:11.5px;gap:11px}
+    canvas{height:44px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#8fb0ff" stroke-width="1.7" stroke-linecap="round">
+          <path d="M4 11v2a8 8 0 0 0 16 0v-2"/><path d="M4 11h16"/><path d="M7 19h10"/>
+        </svg>
+      </div>
+      <div>
+        <h1>座位总览</h1>
+        <p class="sub">ANTI · SEAT · HOG　局域网自动发现</p>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">在线座位</div><div class="v" id="s-on">0</div></div>
+      <div class="stat"><div class="k">有人使用</div><div class="v" id="s-seated">0</div></div>
+      <div class="stat alarm"><div class="k">占座告警</div><div class="v" id="s-hog">0</div></div>
+      <div class="stat"><div class="k">现在</div><div class="v clock" id="s-clock">--:--:--</div></div>
+    </div>
+    <button id="snd" class="sndbtn" title="点一下开启提示音（浏览器要求先有一次点击）">🔔 提示音 · 关</button>
+  </header>
+
+  <div class="legend">
+    <span><i style="background:#34d399"></i>空闲</span>
+    <span><i style="background:#60a5fa"></i>有人使用</span>
+    <span><i style="background:#fbbf24"></i>座上有物品</span>
+    <span><i style="background:#f87171"></i>占座告警</span>
+  </div>
+
+  <div class="grid" id="grid"><div class="empty"><h3>正在发现座位…</h3>设备每 3 秒广播一次 <code>UDP 4210</code>，没反应就在 <code>seats.txt</code> 里写 IP。</div></div>
+
+  <footer>
+    <span id="f-count">—</span>
+    <span>·</span>
+    <span>刷新率 1s</span>
+    <span>·</span>
+    <span id="f-upd">—</span>
+  </footer>
+</div>
+
+<script>
+const HISTORY = 60;
+const hist = {};     // ip -> [weights]
+const nodes = {};    // ip -> dom refs
+
+const COLOR = {empty:'#34d399', seated:'#60a5fa', object:'#fbbf24', hog:'#f87171'};
+const LABEL = {empty:'空闲', seated:'有人使用', object:'座上有物品', hog:'占座告警'};
+
+// 和固件里的 HOG_TIMEOUT_MS 保持一致：DEBUG_FAST=1 时 20 秒，正式 10 分钟（600 秒）
+const HOG_SEC = 20;
+
+function fmtDur(s){
+  s = Math.max(0, Math.floor(s||0));
+  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`
+           : `${m}:${String(x).padStart(2,'0')}`;
+}
+
+function spark(cv, arr, color){
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w*dpr || cv.height !== h*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  if (arr.length < 2) return;
+  const min = Math.min(...arr), max = Math.max(...arr);
+  const span = Math.max(80, max-min);
+  const y = v => h - 4 - ((v-min)/span) * (h-8);
+  const x = i => (i/(HISTORY-1)) * w;
+  const off = HISTORY - arr.length;
+
+  g.beginPath();
+  g.moveTo(x(off), y(arr[0]));
+  for (let i=1;i<arr.length;i++) g.lineTo(x(off+i), y(arr[i]));
+  g.lineWidth = 1.8; g.strokeStyle = color; g.globalAlpha = .95;
+  g.lineJoin = 'round'; g.stroke();
+
+  g.lineTo(x(HISTORY-1), h); g.lineTo(x(off), h); g.closePath();
+  const grd = g.createLinearGradient(0,0,0,h);
+  grd.addColorStop(0, color+'55'); grd.addColorStop(1, color+'00');
+  g.globalAlpha = 1; g.fillStyle = grd; g.fill();
+}
+
+function buildCard(s){
+  const c = document.createElement('div');
+  c.className = 'card';
+  c.innerHTML = `
+    <div class="chead">
+      <div>
+        <div class="name"><span class="dot"></span><span class="nm"></span></div>
+        <div class="ip"></div>
+      </div>
+      <div class="pill"></div>
+    </div>
+    <div class="weight"><b>--</b><span>kg</span></div>
+    <canvas></canvas>
+    <div class="rows">
+      <div class="row"><span>滞留 / 持续</span><b class="d1">--</b></div>
+      <div class="row"><span>红外</span><b class="d2">--</b></div>
+      <div class="row"><span>信号</span><b class="d3">--</b></div>
+      <div class="row"><span>在线时长</span><b class="d4">--</b></div>
+      <div class="row" style="grid-column:1/-1"><span>原始值 / 抖动 / MP3回包</span><b class="d5">--</b></div>
+    </div>
+    <div class="acts">
+      <button class="btn" data-act="tare">重新去皮</button>
+      <button class="btn" data-act="mp3">试听报警音</button>
+      <button class="btn warn" data-act="stop">停音乐</button>
+      <button class="btn" data-act="reset">清除报警</button>
+    </div>`;
+  c.querySelectorAll('.btn').forEach(b => {
+    if (!b.dataset.act) return;
+    b.onclick = async () => {
+      b.classList.add('ghost');
+      try { await fetch(`/cmd?ip=${encodeURIComponent(s.ip)}&act=${b.dataset.act}`); }
+      finally { setTimeout(()=>b.classList.remove('ghost'), 400); }
+    };
+  });
+  return c;
+}
+
+function update(){
+  const grid = document.getElementById('grid');
+  fetch('/state').then(r=>r.json()).then(list=>{
+    const seen = new Set();
+    let seated=0, hog=0;
+    if (!list.length){
+      grid.innerHTML = `<div class="empty"><h3>正在发现座位…</h3>设备每 3 秒广播一次 <code>UDP 4210</code>，没反应就在 <code>seats.txt</code> 里写 IP。</div>`;
+    } else if (grid.querySelector('.empty')) {
+      grid.innerHTML = '';
+    }
+    for (const s of list){
+      seen.add(s.ip);
+      const color = COLOR[s.state] || '#64748b';
+      if (!nodes[s.ip]){
+        const card = buildCard(s);
+        grid.appendChild(card);
+        nodes[s.ip] = {card, cv: card.querySelector('canvas')};
+      }
+      const n = nodes[s.ip], card = n.card;
+      card.style.setProperty('--c', color);
+      card.classList.toggle('hog', s.state === 'hog');
+      card.querySelector('.nm').textContent = s.name || s.ip;
+      card.querySelector('.ip').textContent = s.ip + (s.online ? '' : ' · 离线');
+      const pill = card.querySelector('.pill');
+      pill.textContent = s.online ? (LABEL[s.state]||s.state) : '离线';
+      const w = Number(s.weight);
+      card.querySelector('.weight b').textContent = s.online ? (w/1000).toFixed(2) : '--';
+      let d1 = '--';
+      if (s.online){
+        d1 = fmtDur(s.state === 'hog' ? s.objectSec : s.stateSec);
+        if (s.state === 'object'){                 // 倒计时：评委看得见「还有几秒报警」
+          const left = Math.max(0, HOG_SEC - (s.objectSec || 0));
+          d1 = left + ' 秒后报警';
+        } else if (s.state === 'hog'){
+          d1 = '已占 ' + fmtDur(s.objectSec);
+        }
+      }
+      card.querySelector('.d1').textContent = d1;
+      card.querySelector('.d2').textContent = s.online ? (s.pir ? '有动作' : '安静') : '--';
+      card.querySelector('.d3').textContent = s.online ? (s.rssi + ' dBm') : '--';
+      card.querySelector('.d4').textContent = s.online ? fmtDur(s.uptime) : '--';
+      if (s.online){
+        (hist[s.ip] = hist[s.ip] || []).push(w);
+        if (hist[s.ip].length > HISTORY) hist[s.ip].shift();
+        const h = hist[s.ip].slice(-12);
+        const jit = h.length > 1 ? (Math.max(...h) - Math.min(...h)) / 2 : 0;
+        let txt = String(s.raw ?? '--');
+        if (s.ver) txt = 'v' + s.ver + ' · ' + txt;
+        const rx = (s.mp3rx == null) ? '—' : (s.mp3rx + 'B');
+        card.querySelector('.d5').textContent = txt + ' / ±' + (jit/1000).toFixed(2) + 'kg / MP3:' + rx;
+      } else {
+        card.querySelector('.d5').textContent = '--';
+      }
+      spark(n.cv, hist[s.ip] || [], color);
+      if (s.state === 'seated') seated++;
+      if (s.state === 'hog') hog++;
+    }
+    for (const ip of Object.keys(nodes)){
+      if (!seen.has(ip)){ nodes[ip].card.remove(); delete nodes[ip]; delete hist[ip]; }
+    }
+    document.getElementById('s-on').textContent = list.filter(s=>s.online).length;
+    document.getElementById('s-seated').textContent = seated;
+    document.getElementById('s-hog').textContent = hog;
+    setHogCount(hog);
+    document.getElementById('f-count').textContent = `共 ${list.length} 个座位`;
+    document.getElementById('f-upd').textContent = '最后更新 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  }).catch(()=>{});
+}
+
+/* ==================== 占座提示音（电脑这边） ==================== */
+let actx = null, sndOn = false, ringTimer = null, hogNow = false;
+const sndBtn = document.getElementById('snd');
+const TITLE0 = document.title;
+
+function audio(){
+  if (!actx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+  }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+
+function tone(freq, start, dur, vol){
+  const a = audio(); if (!a) return;
+  const t = a.currentTime + start;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = 'triangle'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+  g.gain.setValueAtTime(vol, t + Math.max(0.05, dur - 0.05));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(a.destination);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+
+// 三声急 + 一声低：占座告警的调子
+function alarmPattern(){
+  tone(1046, 0,    0.13, 0.30);
+  tone(1046, 0.19, 0.13, 0.30);
+  tone(1046, 0.38, 0.13, 0.30);
+  tone(740,  0.60, 0.34, 0.26);
+}
+
+function startRinging(){
+  if (ringTimer) return;
+  alarmPattern();
+  ringTimer = setInterval(alarmPattern, 1500);
+  sndBtn.classList.add('ringing');
+}
+function stopRinging(){
+  if (ringTimer){ clearInterval(ringTimer); ringTimer = null; }
+  sndBtn.classList.remove('ringing');
+}
+function setHogCount(hog){
+  hogNow = hog > 0;
+  document.title = hogNow ? `⚠ ${hog} 个占座告警` : TITLE0;
+  if (sndOn && hogNow) startRinging(); else stopRinging();
+}
+let audioReady = false;      // 浏览器要求先有一次点击才允许出声
+function paintSnd(){
+  sndBtn.classList.toggle('on', sndOn);
+  sndBtn.textContent = !sndOn ? '🔔 提示音 · 关'
+                     : (audioReady ? '🔔 提示音 · 开' : '🔔 提示音 · 点一下开启');
+  localStorage.setItem('snd', sndOn ? '1' : '0');
+}
+sndBtn.onclick = () => {
+  if (!audioReady){ audioReady = true; sndOn = true; }   // 第一次点：解锁 + 打开
+  else { sndOn = !sndOn; }
+  paintSnd();
+  if (sndOn){ audio(); tone(880, 0, 0.12, 0.22); }       // 开的时候先响一声
+  if (sndOn && hogNow) startRinging(); else stopRinging();
+};
+// 浏览器要求先有一次用户点击才允许出声：页面任何一次点击都顺手解锁
+document.addEventListener('click', () => { if (sndOn) { audio(); audioReady = true; paintSnd(); } });
+if (localStorage.getItem('snd') === '1'){ sndOn = true; paintSnd(); }
+
+setInterval(()=>document.getElementById('s-clock').textContent =
+  new Date().toLocaleTimeString('zh-CN',{hour12:false}), 1000);
+setInterval(update, 1000);
+update();
+</script>
+</body>
+</html>
